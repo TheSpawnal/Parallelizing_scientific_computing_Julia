@@ -23,3 +23,16 @@ end
 using Test
 arr = [3,4,7,3,1,7,2]
 @test ex1(arr) == (7,3)
+
+
+# ### Exercise 2
+# Implement a function `ex2(f,g)` that takes two functions `f(x)` and `g(x)` 
+# and returns a new function `h(x)` representing the sum of `f` and `g`, i.e., `h(x)=f(x)+g(x)`.
+function ex2(f, g)
+    # Return a new anonymous function that adds the results of f(x) and g(x)
+    return x -> f(x) + g(x)
+end
+h = ex2(sin,cos)
+xs = LinRange(0,2π,100)
+@test all(x-> h(x) == sin(x)+cos(x), xs)
+
