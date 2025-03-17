@@ -2,7 +2,7 @@ using Test, BenchmarkTools, Distributed
 
 # Ensure we have workers
 if nworkers() < 2
-    addprocs(4)  # Add workers if none exist
+    addprocs(6)  # Add workers if none exist
 end
 
 @everywhere function matmul_seq!(C, A, B)
@@ -52,7 +52,7 @@ matmul_dist_3!(C_par, A, B)
 
 # Performance test with a reasonable load
 println("\n=== Testing performance ===\n")
-load = 50
+load = 100
 N = load * P
 A = rand(N, N)
 B = rand(N, N)
