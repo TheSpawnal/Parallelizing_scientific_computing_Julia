@@ -1,4 +1,3 @@
-#Parallel Matrix Multiplication with Logging
 @everywhere using Logging, Dates, Printf
 
 # Custom colorful logger for performance tracking
@@ -29,8 +28,10 @@ end
     println(color, prefix, " ", message, "\e[0m")
 end
 
-@everywhere Logging.min_level(logger::ColorfulLogger) = logger.min_level
+# Define required logger interface methods
 @everywhere Logging.shouldlog(logger::ColorfulLogger, level, _module, group, id) = level >= logger.min_level
+@everywhere Logging.min_enabled_level(logger::ColorfulLogger) = logger.min_level
+@everywhere Logging.catch_exceptions(logger::ColorfulLogger) = false
 
 @everywhere colorful_logger = ColorfulLogger(Logging.Info)
 
@@ -80,42 +81,40 @@ function matmul_dist_3!(C, A, B)
                 # Spawn task on worker
                 ftr = @spawnat w begin
                     # Local worker logging
-                    with_logger(colorful_logger) do
-                        worker_start = time_ns()
-                        @info "Received data" A_rows_size=@sprintf("%.2f MB", sizeof(A_rows)/(1024*1024)) B_size=@sprintf("%.2f MB", sizeof(B)/(1024*1024))
-                        
-                        # Create result matrix for this worker's rows
-                        local_rows = size(A_rows, 1)
-                        C_part = zeros(eltype(C), local_rows, n)
-                        
-                        # Compute the matrix multiplication for assigned rows
-                        compute_start = time_ns()
-                        for i in 1:local_rows
-                            for j in 1:n
-                                for k in 1:l
-                                    @inbounds C_part[i, j] += A_rows[i, k] * B[k, j]
-                                end
+                    worker_start = time_ns()
+                    @info "Received data" A_rows_size=@sprintf("%.2f MB", sizeof(A_rows)/(1024*1024)) B_size=@sprintf("%.2f MB", sizeof(B)/(1024*1024))
+                    
+                    # Create result matrix for this worker's rows
+                    local_rows = size(A_rows, 1)
+                    C_part = zeros(eltype(C), local_rows, n)
+                    
+                    # Compute the matrix multiplication for assigned rows
+                    compute_start = time_ns()
+                    for i in 1:local_rows
+                        for j in 1:n
+                            for k in 1:l
+                                @inbounds C_part[i, j] += A_rows[i, k] * B[k, j]
                             end
                         end
-                        
-                        # Track computation metrics
-                        compute_time = (time_ns() - compute_start) / 1e9
-                        flops = local_rows * n * l * 2  # multiply-add counts as 2 operations
-                        gflops = flops / (compute_time * 1e9)
-                        
-                        @info "Computation complete" compute_time=@sprintf("%.6f s", compute_time) gflops=@sprintf("%.2f GFLOPS", gflops)
-                        
-                        # Track return data size
-                        return_data_size = sizeof(C_part)
-                        @info "Sending results back" result_size=@sprintf("%.2f MB", return_data_size/(1024*1024))
-                        
-                        # Total worker execution time
-                        total_worker_time = (time_ns() - worker_start) / 1e9
-                        @info "Worker task complete" total_time=@sprintf("%.6f s", total_worker_time)
-                        
-                        # Return result
-                        C_part
                     end
+                    
+                    # Track computation metrics
+                    compute_time = (time_ns() - compute_start) / 1e9
+                    flops = local_rows * n * l * 2  # multiply-add counts as 2 operations
+                    gflops = flops / (compute_time * 1e9)
+                    
+                    @info "Computation complete" compute_time=@sprintf("%.6f s", compute_time) gflops=@sprintf("%.2f GFLOPS", gflops)
+                    
+                    # Track return data size
+                    return_data_size = sizeof(C_part)
+                    @info "Sending results back" result_size=@sprintf("%.2f MB", return_data_size/(1024*1024))
+                    
+                    # Total worker execution time
+                    total_worker_time = (time_ns() - worker_start) / 1e9
+                    @info "Worker task complete" total_time=@sprintf("%.6f s", total_worker_time)
+                    
+                    # Return result
+                    C_part
                 end
                 
                 # Asynchronously update C with results when they arrive
