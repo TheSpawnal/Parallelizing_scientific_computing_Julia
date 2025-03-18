@@ -3,6 +3,9 @@ using MPI
 using Printf
 using Statistics
 
+
+MPI.Init()
+
 function matrix_to_string(A, max_elements=5)
     m, n = size(A)
     
@@ -13,13 +16,19 @@ function matrix_to_string(A, max_elements=5)
         result = "$(m)×$(n) matrix (showing $(rows)×$(cols)):\n"
         
         for i in 1:rows
+            row_str = ""
             for j in 1:cols
-                result *= @sprintf("%.2f ", A[i,j])
+                row_str *= @sprintf("%.2f ", A[i,j])
             end
-            result *= j < n ? "... " : ""
-            result *= "\n"
+            # Add ellipsis if we're not showing all columns
+            if cols < n
+                row_str *= "... "
+            end
+            result *= row_str * "\n"
         end
-        if i < m
+        
+        # Add ellipsis if we're not showing all rows
+        if rows < m
             result *= "...\n"
         end
         return result
