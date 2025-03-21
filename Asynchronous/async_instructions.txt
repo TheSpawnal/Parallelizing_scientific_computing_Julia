@@ -1,0 +1,181 @@
+Tasks
+Creating a task
+Technically, a task in Julia is a symmetric co-routine. More informally, a task is a piece of computational work that can be started (scheduled) at some point in the future, and that can be interrupted and resumed. To create a task, we first need to create a function that represents the work to be done in the task. In the next cell, we generate a task that generates and sums two matrices.
+
+function work()
+    println("Starting work")
+    sleep(7)
+    a = rand(3,3)
+    b = rand(3,3)
+    r = a + b
+    println("Finishing work")
+    r
+end
+t = Task(work)
+Scheduling a task
+The task has been created, but the corresponding work has not started. Note that we do not see any output from function work yet. To run the task we need to schedule it.
+
+schedule(t)
+Fetching the task result
+The task has been executed, but we do not see the result. To get the result we need to fetch it.
+
+fetch(t)
+Tasks run asynchronously
+It is important to note that tasks run asynchronously. To illustrate this let's create and schedule a new task.
+
+t = Task(work)
+schedule(t)
+Note that while the task is running we can execute Julia code. To check this, execute the next two cells while the task is running.
+
+sin(4π)*exp(-0.1)
+1 + 1
+How is this possible? Tasks run in the background and this particular task is sleeping for most of the time. Thus, it is possible to use the current Julia process for other operations while the task is sleeping.
+
+Tasks do not run in parallel
+It is also important to note that tasks do not run in parallel. We were able to run code while previous tasks was running because the task was idling most of the time in the sleep function. If the task does actual work, the current process will be busy running this task and preventing to run other tasks. Let's illustrate this with an example. The following code computes an approximation of 
+π
+ using Leibniz formula. The quality of the approximation increases with the value of n.
+
+function compute_π(n)
+    s = 1.0
+    for i in 1:n
+        s += (isodd(i) ? -1 : 1) / (i*2+1)
+    end
+    4*s
+end
+Call this function with a large number. Note that it will take some time.
+
+compute_π(4_000_000_000)
+Create a task that performs this computation.
+
+fun = () -> @show compute_π(4_000_000_000)
+t = Task(fun)
+Schedule the tasks and then try to execute the 2nd cell bellow. Note that the current process will be busy running the task.
+
+schedule(t)
+1+1
+yield
+If tasks do not run in parallel, what is the purpose of tasks? Tasks are handy since they can be interrupted and to switch control to other tasks. This is achieved via function yield. When we call yield, we provide the opportunity to switch to another task. The function below is a variation of function compute_π in which we yield every 1000 iterations. At the call to yield we allow other tasks to take over. Without this call to yield, once we start function compute_π we cannot start any other tasks until this function finishes.
+
+function compute_π_yield(n)
+    s = 1.0
+    for i in 1:n
+        s += (isodd(i) ? -1 : 1) / (i*2+1)
+        if mod(i,1000) == 0
+            yield()
+        end
+    end
+    4*s
+end
+You can check this behavior experimentally with the two following cells. The next one creates and schedules a task that computes pi with the function compute_π_yield. Note that you can run the 2nd cell bellow while this task is running since we call to yield often inside compute_π_yield.
+
+fun = () -> @show compute_π_yield(3_000_000_000)
+t = Task(fun)
+schedule(t)
+1+1
+Example: Implementing function sleep
+Using yield, we can implement our own version of the sleep function as follows:
+
+function mysleep(secs)
+    final_time = time() + secs
+    while time() < final_time
+        yield()
+    end
+    nothing
+end
+You can check that it behaves as expected.
+
+@time mysleep(3)
+Tasks take a function with no arguments
+This function needs to have zero arguments, but it can capture variables if needed. If we try to create a task with a function that has arguments, it will result in an error when we schedule it.
+
+add(a,b) = a + b
+t = Task(add)
+schedule(t)
+If we need, we can capture variables in the function to be run by the task as shown in the next cells.
+
+a = rand(3,3)
+b = rand(3,3);
+fun = () -> add(a, b)
+t = Task(fun)
+schedule(t)
+Useful macro: @async
+So far, we have created tasks using low-level functions, but there are more convenient ways of creating and scheduling tasks. For instance using the @async macro. This macro is used to run a piece of code asynchronously. Under the hood it puts the code in an anonymous function, creates a task, and schedules it. For instance, the next cell is equivalent to the previous one.
+
+@async a + b
+Another useful macro: @sync
+This macro is used to wait for all the tasks created with @async in a given block of code.
+
+@sync begin
+    @async sleep(3)
+    @async sleep(4)
+end
+Channels
+Sending data between tasks
+Julia provides channels as a way to send data between tasks. A channel is like a FIFO queue which tasks can put values into and take values from. In the next example, we create a channel and a task that puts five values into the channel. Finally, the task closes the channel.
+
+chnl = Channel{Int}()
+@async begin
+    for i in 1:5
+        put!(chnl,i)
+    end
+    close(chnl)
+end
+By executing next cell several times, we will get the values from the channel. We are indeed communicating values from two different tasks. If we execute the cell more than 5 times, it will raise an error since the channel is closed.
+
+take!(chnl)
+Channels are iterable
+Instead of taking values from a channel until an error occurs, we can also iterate over the channel in a for loop until the channel is closed.
+
+chnl = Channel{Int}()
+@async begin
+    for i in 1:5
+        put!(chnl,i)
+    end
+    close(chnl)
+end
+for i in chnl
+    @show i
+end
+Calls to put! and take! are blocking
+Note that put! and take! are blocking operations. Calling put! blocks the tasks until another task calls take! and viceversa. Thus, we need at least 2 tasks for this to work. If we call put! and take! from the same task, it will result in a dead lock. We have added a print statement to the previous example. Run it again and note how put! blocks until we call take!.
+
+chnl = Channel{Int}()
+@async begin
+    for i in 1:5
+        put!(chnl,i)
+        println("I have put $i")
+    end
+    close(chnl)
+end
+take!(chnl)
+Buffered channels
+We can be a bit more flexible and use a buffered channel. In this case, put! will block only if the channel is full and take! will block if the channel is empty. We repeat the previous example, but with a buffered channel of size 2. Note that we can call put! until the channel is full. At this point, we need to wait to until we call take! which removes an item from the channel, making room for a new item.
+
+buffer_size = 2
+chnl = Channel{Int}(buffer_size)
+@async begin
+    for i in 1:5
+        put!(chnl,i)
+        println("I have put $i")
+    end
+    close(chnl)
+end
+take!(chnl)
+
+
+In summary:
+
+put! will wait for a take! if there is not space left in the channel's buffer.
+take! will wait for a put! if there is no data to be consumed in the channel.
+Both put! and take! will raise an error if the channel is closed.
+
+In order to start "thinking in parallel" we first need to be familiar with concepts of asynchronous programming, 
+in particular tasks. Here, we have seen the basics of working with tasks. 
+Some key points to remember:
+How to create, schedule, and fetch from a task.
+Tasks run asynchronously, but not in parallel. 
+You can have a single core CPU and still be able to work with several tasks.
+Channels are used to communicate data between tasks.
+Adding data (put!) or taking data (take!) from a channel might wait depending on the channel state. 
+Be careful to avoid dead locks.

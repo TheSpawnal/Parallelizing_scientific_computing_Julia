@@ -3,8 +3,8 @@ using Printf
 """
 A demonstration of a data processing pipeline using channels and tasks.
 Each stage of the pipeline processes data and passes it to the next stage.
-
-This example demonstrates a multi-stage data pipeline using channels to pass data between stages. Each stage (generator, transformer, analyzer, collector) runs as a separate task, processing data asynchronously and cooperatively yielding control to maintain system responsiveness.
+This example demonstrates a multi-stage data pipeline using channels to pass data between stages. 
+Each stage (generator, transformer, analyzer, collector) runs as a separate task, processing data asynchronously and cooperatively yielding control to maintain system responsiveness.
 The code showcases buffered channels for communication between pipeline stages and the @sync/@async macros for task synchronization.
 """
 
