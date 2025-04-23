@@ -10,8 +10,7 @@ i of vector u at iteration t+1 is computed as:
 
 Serial implementation
 The following code implements the iterative scheme above for boundary conditions -1 and 1 on a grid with  
-n
-  interior points.
+n interior points.
 
 Note: `u, u_new = u_new, u` is equivalent to `tmp = u; u = u_new; u_new = tmp`. I.e. we swap the arrays `u` and `u_new` are referring to.
 function jacobi(n,niters)
